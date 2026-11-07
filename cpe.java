@@ -141,7 +141,24 @@ final class ForwardingTableBuilder {
      * Do not mutate the inputs or previous results. See the P3 Prompt in Modules.
      */
     Map<String, RouteEntry> build(GraphSnapshot topology, ShortestPathResult paths) {
-        throw new UnsupportedOperationException("TODO: implement ForwardingTableBuilder.build");
+        Map<String, RouteEntry> table = new TreeMap<>();
+        String source = paths.source();
+
+        for (String dest: topology.adjacency().keySet()) {
+            if (dest.equals(source)) {
+                table.put(dest, new RouteEntry(source, 0L, true)); 
+            } else if (!paths.distances().containsKey(dest)) {
+                table.put(dest, RouteEntry.unreachable());
+            } else {
+                String hop = dest;
+                while (!paths.predecessors().get(hop).equals(source)) {
+                    hop = paths.predecessors().get(hop);
+                }
+                table.put(dest, new RouteEntry(hop, paths.distances().get(dest), true));
+            }
+        }
+
+        return Collections.unmodifiableMap(table);
     }
 }
 
