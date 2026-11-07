@@ -119,7 +119,44 @@ final class RoutingController {
      * See the linked HTML prompt in Canvas Modules for the full contract.
      */
     synchronized AuditRecord handle(TopologyEvent event) {
-        throw new UnsupportedOperationException("TODO: implement RoutingController.handle");
+        if (event instanceof InitialTopology && initialized) {
+            throw new IllegalStateException("Already Initialized");
+        }
+
+        if (event instanceof LinkChange && !initialized) {
+            throw new IllegalStateException("Topology not initialized");
+        }
+
+        if (event instanceof InitialTopology init) {
+            graph.initialize(init.nodes(), init.links());
+        } else if (event instanceof LinkChange change) {
+            graph.change(change.a(), change.b(), change.up(), change.cost());
+        }
+
+        long accepted = System.nanoTime();
+        GraphSnapshot snapshot = graph.snapshot();
+
+        long computeStarted = System.nanoTime();
+
+        Map<String, Map<String, RouteEntry>> tables = new TreeMap<>();
+
+        for (String root: snapshot.adjacency().keySet()) {
+            ShortestPathResult paths = solver.compute(snapshot, root);
+            Map<String, RouteEntry> table = builder.build(snapshot, paths);
+            tables.put(root, table);
+        }
+
+        long computeFinished = System.nanoTime();
+
+        generation++;
+        initialized = true;
+
+        forwarding.publish(new ForwardingSnapshot(generation, tables));
+        long published = System.nanoTime();
+
+        return new AuditRecord(event.id(),
+         event.type(), 
+         generation, accepted, computeStarted, computeFinished, published);
     }
 
     ForwardingSnapshot current() { return forwarding.current(); }
